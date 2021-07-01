@@ -1,0 +1,133 @@
+function matrix forecast (matrix y,
+                          matrix fc,
+                          int nhor,
+                          int method)
+
+    /* Compute cross-validated mean/ median of the respective forecast evaluation metric.
+
+    return:
+    matrix, 2 by nhor matrix showing the cross-validated mean (row 1) and
+    median (row 2) of the selected evaluation criteria for each horizon
+    (columns).*/
+
+    string rnames = ""
+
+    if method == 1
+        matrix fcstat = zeros(nhor,9)
+        loop i=1..nhor -q
+            fcstat[i,] = fcstats(y[1:i],fc[1:i])'
+            rnames += "h=$i "
+        endloop
+
+    elif method == 2
+        matrix fcstat = zeros(nhor,2)
+        loop i=1..nhor -q
+            fcstat[i,] = qpslps(y[1:i] ,fc[1:i])
+            rnames += "h=$i "
+        endloop
+
+    elif method == 3
+        scalar nval = cols(fc)
+        matrix fcstat = {}
+        # fcstat: nval=1(QPS~LPS | h=1 to h=4) ~...~ nval=k(QPS~LPS | h=1 to h=4)
+
+        loop i=1..nval -q
+            matrix mat = zeros(nhor, 2)
+            # Classify the event of interest, 0/1
+            matrix D = y .== ($i - 1)
+
+            loop j=1..nhor -q
+                mat[j,] = qpslps(D[1:j],fc[1:j,i])
+            endloop
+
+            fcstat ~= mat
+        endloop
+
+    endif
+
+    rnameset(fcstat,rnames)
+
+    return fcstat
+end function
+
+
+function matrix qpslps (matrix y "Binary",
+                        matrix Pr "Estimated probability")
+    if nobs(Pr)==nobs(y)
+        if sumc(Pr>0)
+            scalar T = rows(Pr)
+            matrix QPS =  T^-1 * sumc( (Pr-y).^2 )
+            matrix LPS = -T^-1 * sumc((1-y) .* log(1.-Pr) + y.*log(Pr))
+        else
+            matrix QPS = zeros(1,1)
+            matrix LPS = zeros(1,1)
+        endif
+        matrix mout = QPS ~ LPS
+        cnameset(mout, "QPS LPS")
+        return mout
+    else
+        printf "\nError qpslps function:\n"
+        printf "The series are not of the same lenght.\n"
+    endif
+end function
+
+
+function matrix crossvalid (const series y,
+                            const list xlist,
+                            int k "Length of training set",
+                            int nhor,
+                            int method,
+                            int fccrit[1:9:3])
+    /* */
+
+    errorif((method == 2 && fccrit > 2),\
+            "For probit-type model, maximum of 'fccrit' parameter value is 2. Please re-specify.")
+
+    list lall = y xlist
+    smpl --no-missing lall
+    scalar t1 = $t1
+    scalar n = nobs(y)
+    scalar nsel = t1 + (k - 2)
+    string st = obslabel( t1 + (k - 2) )
+    scalar nstep = n - k - nhor + 1
+    matrix fceval = zeros(nstep, nhor)
+
+
+    printf "INFO: Start cross-validation over %d respective training and test sets.\n", nstep
+    flush
+
+    loop i=1..nstep -q
+        # Training set -- fixed beginning period but extending end-period
+        string trainend = obslabel( obsnum(st) + $i )
+        smpl t1 @trainend
+
+        if method==1
+            ols y xlist -q
+        elif method==2
+            probit y xlist -q
+        endif
+
+        fcast FC --out-of-sample
+
+        # Test set
+        string teststart = obslabel(obsnum(trainend)+1)
+        string testend = obslabel(obsnum(teststart) + nhor-1)
+        smpl @teststart @testend
+
+        matrix fcstat = forecast({y}, {FC}, nhor, method)
+        fceval[i,] = fcstat[,fccrit]'
+    endloop
+
+    fcstat = meanc(fceval)
+    fcstat = fcstat | quantile(fceval, 0.5)
+
+    string cname = ""
+    loop i=1..nhor -q
+        cname += "h=$i "
+    endloop
+
+    cnameset(fcstat, cname)
+    rnameset(fcstat, "Mean Median")
+
+    return fcstat
+end function

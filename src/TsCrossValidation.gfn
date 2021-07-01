@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gretl-functions>
+<gretl-function-package name="TsCrossValidation" needs-time-series-data="true" minver="2020b">
+<author email="atecon@posteo.de">Artur Tarassow</author>
+<version>0.3</version>
+<date>2021-07-01</date>
+<description>Time-series cross-validation</description>
+<tags>C53</tags>
+<help>
+The dataset can be divided into T = R + P where R refers to the training
+set used for estimating the parameters of interest. The estimated
+coefficients are used to fit the model for the out-of-sample R+h
+(h &gt; 0, h &lt; P) observations.
+These h-step forecasts are evaluated using some criteria such as e.g.
+MAE. Next, extend the training set to R+1, and repeat the steps for
+R+1+h as before.
+
+See also R. Hyndman &quot;Time series cross-validation: an R example
+URL: http://robjhyndman.com/hyndsight/tscvexample/
+
+
+Note: The user-contributed package named &quot;naiveFC&quot; also supports
+cross-validating various time-series models. See here:
+http://ricardo.ecn.wfu.edu/gretl/cgi-bin/current_fnfiles/unzipped/naiveFC.pdf
+
+
+
+Public functions
+=================
+
+crossvalid(const series y, const list X, int k, int nhor, int method,
+           int fccrit)
+========================================================================
+
+Parameters
+-----------
+y          - series, Dependent series
+X          - list, List of regressors (incl. deterministics)
+k          - int, Length of the training set TODO
+nhor       - int, Number of multi-step forecast horizons (1 to 'nhor')
+method     - int, Type of estimator:
+                               1 = OLS
+                               2 = PROBIT
+fccrit     - int, Select forecast evaluation metric (see 'help fcstats'):
+                               1 = ME
+                               2 = MSE
+                               3 = MAE
+                               4 = MPE
+                               5 = MAPE
+                               6 = U
+                               7 = UM
+                               8 = UR
+                               9 = UD
+             For probit model only:
+                               1 = Quadratic Probability Score
+                               2 = Log Probability Score
+
+
+Return:
+--------
+matrix, 2 by nhor matrix showing the cross-validated mean (row 1) and
+median (row 2) of the selected evaluation criteria for each horizon
+(columns).
+
+
+CHANGELOG:
+v0.3 (July 2021)
+  - Update some internals and help text
+  - increase minimum version from 1.9.4 to 2020b
+
+v0.2 (24.1.16)
+ - initial version
+</help>
+<gretl-function name="crossvalid" type="matrix">
+ <params count="6">
+  <param name="y" type="series" const="true"/>
+  <param name="xlist" type="list" const="true"/>
+  <param name="k" type="int">
+<description>Length of training set</description>
+  </param>
+  <param name="nhor" type="int"/>
+  <param name="method" type="int"/>
+  <param name="fccrit" type="int" min="1" max="9" default="3"/>
+ </params>
+<code>/* */
+errorif((method == 2 &amp;&amp; fccrit &gt; 2), &quot;For probit-type model, maximum of 'fccrit' parameter value is 2. Please re-specify.&quot;)
+list lall = y xlist
+smpl --no-missing lall
+scalar t1 = $t1
+scalar n = nobs(y)
+scalar nsel = t1 + (k - 2)
+string st = obslabel( t1 + (k - 2) )
+scalar nstep = n - k - nhor + 1
+matrix fceval = zeros(nstep, nhor)
+printf &quot;INFO: Start cross-validation over %d respective training and test sets.\n&quot;, nstep
+flush
+loop i=1..nstep -q
+  # Training set -- fixed beginning period but extending end-period
+  string trainend = obslabel( obsnum(st) + $i )
+  smpl t1 @trainend
+  if method==1
+    ols y xlist -q
+  elif method==2
+    probit y xlist -q
+  endif
+  fcast FC --out-of-sample
+  # Test set
+  string teststart = obslabel(obsnum(trainend)+1)
+  string testend = obslabel(obsnum(teststart) + nhor-1)
+  smpl @teststart @testend
+  matrix fcstat = forecast({y}, {FC}, nhor, method)
+  fceval[i,] = fcstat[,fccrit]'
+endloop
+fcstat = meanc(fceval)
+fcstat = fcstat | quantile(fceval, 0.5)
+string cname = &quot;&quot;
+loop i=1..nhor -q
+  cname += &quot;h=$i &quot;
+endloop
+cnameset(fcstat, cname)
+rnameset(fcstat, &quot;Mean Median&quot;)
+return fcstat
+</code>
+</gretl-function>
+<gretl-function name="forecast" type="matrix" private="1">
+ <params count="4">
+  <param name="y" type="matrix"/>
+  <param name="fc" type="matrix"/>
+  <param name="nhor" type="int"/>
+  <param name="method" type="int"/>
+ </params>
+<code>/* Compute cross-validated mean/ median of the respective forecast evaluation metric.
+return:
+matrix, 2 by nhor matrix showing the cross-validated mean (row 1) and
+median (row 2) of the selected evaluation criteria for each horizon
+(columns).*/
+string rnames = &quot;&quot;
+if method == 1
+  matrix fcstat = zeros(nhor,9)
+  loop i=1..nhor -q
+    fcstat[i,] = fcstats(y[1:i],fc[1:i])'
+    rnames += &quot;h=$i &quot;
+  endloop
+elif method == 2
+  matrix fcstat = zeros(nhor,2)
+  loop i=1..nhor -q
+    fcstat[i,] = qpslps(y[1:i] ,fc[1:i])
+    rnames += &quot;h=$i &quot;
+  endloop
+elif method == 3
+  scalar nval = cols(fc)
+  matrix fcstat = {}
+  # fcstat: nval=1(QPS~LPS | h=1 to h=4) ~...~ nval=k(QPS~LPS | h=1 to h=4)
+  loop i=1..nval -q
+    matrix mat = zeros(nhor, 2)
+    # Classify the event of interest, 0/1
+    matrix D = y .== ($i - 1)
+    loop j=1..nhor -q
+      mat[j,] = qpslps(D[1:j],fc[1:j,i])
+    endloop
+    fcstat ~= mat
+  endloop
+endif
+rnameset(fcstat,rnames)
+return fcstat
+</code>
+</gretl-function>
+<gretl-function name="qpslps" type="matrix" private="1">
+ <params count="2">
+  <param name="y" type="matrix">
+<description>Binary</description>
+  </param>
+  <param name="Pr" type="matrix">
+<description>Estimated probability</description>
+  </param>
+ </params>
+<code>if nobs(Pr)==nobs(y)
+  if sumc(Pr&gt;0)
+    scalar T = rows(Pr)
+    matrix QPS =  T^-1 * sumc( (Pr-y).^2 )
+    matrix LPS = -T^-1 * sumc((1-y) .* log(1.-Pr) + y.*log(Pr))
+  else
+    matrix QPS = zeros(1,1)
+    matrix LPS = zeros(1,1)
+  endif
+  matrix mout = QPS ~ LPS
+  cnameset(mout, &quot;QPS LPS&quot;)
+  return mout
+else
+  printf &quot;\nError qpslps function:\n&quot;
+  printf &quot;The series are not of the same lenght.\n&quot;
+endif
+</code>
+</gretl-function>
+<sample-script>
+clear
+set verbose off
+
+open denmark.gdt -q
+include TsCrossValidation.gfn
+
+# Set parameters
+scalar k = 25           # Min. data length for fitting a model
+scalar nhor = 4         # Forecast horizon
+
+# OLS
+scalar method = 1
+lags dataset
+scalar p = 2
+list xlist = const LRM(-1 to -p) LRY(0 to -p) IBO(0 to -p) IDE(0 to -p)
+matrix CV1 = crossvalid(LRM, xlist, k, nhor, method, 3)
+
+# ARDL(2,2) + general-to-specific
+ols LRM const LRM(-1 to -p) LRY(0 to -p) IBO(0 to -p) IDE(0 to -p) -q
+omit --auto=0.10
+list xlist = $xlist
+matrix CV2 = crossvalid(LRM, xlist, k, nhor,method, 3)
+
+# PLOT the median MAE value for each horizon
+mplot = CV1[2,]' ~ CV2[2,]'
+colnames(mplot, &quot;ARDL(2,2) ARDL(2,2)+G2S&quot;)
+string title = &quot;Mean absolute error&quot;
+string xname = &quot;Forecast horizon&quot;
+plot mplot
+    options with-lines time-series
+    literal set key top right
+    printf &quot;set title \&quot;%s\&quot;&quot;, title
+    printf &quot;set xlabel \&quot;%s\&quot;&quot;, xname
+end plot --output=display
+
+
+# PROBIT Models
+series y = 0
+y = ( diff(LRM) &gt;= mean(diff(LRM)) )  # arbitrary binary series
+
+scalar method = 2
+scalar fccrit = 2
+
+# Static model + trend
+list xlist = const time
+matrix CV1 = crossvalid(y, xlist, k, nhor,method, fccrit)
+
+# AR(1) + trend
+list xlist = const time y(-1)
+matrix CV2 = crossvalid(y, xlist, k, nhor,method, fccrit)
+
+mplot = CV1[2,]' ~ CV2[2,]'
+colnames(mplot, &quot;Static+trend AR(1)+trend&quot;)
+if fccrit ==1
+    string title = &quot;Quadratic Probability Loss&quot;
+elif fccrit==2
+    string title = &quot;Log Probability Score&quot;
+endif
+string xname = &quot;Forecast horizon&quot;
+plot mplot
+    options with-lines time-series
+    literal set key top right
+    printf &quot;set title \&quot;%s\&quot;&quot;, title
+    printf &quot;set xlabel \&quot;%s\&quot;&quot;, xname
+end plot --output=display
+</sample-script>
+</gretl-function-package>
+</gretl-functions>

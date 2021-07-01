@@ -1,0 +1,66 @@
+clear
+set verbose off
+
+open denmark.gdt -q
+include TsCrossValidation.gfn
+
+# Set parameters
+scalar k = 25           # Min. data length for fitting a model
+scalar nhor = 4         # Forecast horizon
+
+# OLS
+scalar method = 1
+lags dataset
+scalar p = 2
+list xlist = const LRM(-1 to -p) LRY(0 to -p) IBO(0 to -p) IDE(0 to -p)
+matrix CV1 = crossvalid(LRM, xlist, k, nhor, method, 3)
+
+# ARDL(2,2) + general-to-specific
+ols LRM const LRM(-1 to -p) LRY(0 to -p) IBO(0 to -p) IDE(0 to -p) -q
+omit --auto=0.10
+list xlist = $xlist
+matrix CV2 = crossvalid(LRM, xlist, k, nhor,method, 3)
+
+# PLOT the median MAE value for each horizon
+mplot = CV1[2,]' ~ CV2[2,]'
+colnames(mplot, "ARDL(2,2) ARDL(2,2)+G2S")
+string title = "Mean absolute error"
+string xname = "Forecast horizon"
+plot mplot
+    options with-lines time-series
+    literal set key top right
+    printf "set title \"%s\"", title
+    printf "set xlabel \"%s\"", xname
+end plot --output=display
+
+
+# PROBIT Models
+series y = 0
+y = ( diff(LRM) >= mean(diff(LRM)) )  # arbitrary binary series
+
+scalar method = 2
+scalar fccrit = 2
+
+# Static model + trend
+list xlist = const time
+matrix CV1 = crossvalid(y, xlist, k, nhor,method, fccrit)
+
+# AR(1) + trend
+list xlist = const time y(-1)
+matrix CV2 = crossvalid(y, xlist, k, nhor,method, fccrit)
+
+mplot = CV1[2,]' ~ CV2[2,]'
+colnames(mplot, "Static+trend AR(1)+trend")
+if fccrit ==1
+    string title = "Quadratic Probability Loss"
+elif fccrit==2
+    string title = "Log Probability Score"
+endif
+string xname = "Forecast horizon"
+plot mplot
+    options with-lines time-series
+    literal set key top right
+    printf "set title \"%s\"", title
+    printf "set xlabel \"%s\"", xname
+end plot --output=display
+

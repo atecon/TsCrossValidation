@@ -1,0 +1,64 @@
+The dataset can be divided into T = R + P where R refers to the training
+set used for estimating the parameters of interest. The estimated
+coefficients are used to fit the model for the out-of-sample R+h
+(h > 0, h < P) observations.
+These h-step forecasts are evaluated using some criteria such as e.g.
+MAE. Next, extend the training set to R+1, and repeat the steps for
+R+1+h as before.
+
+See also R. Hyndman "Time series cross-validation: an R example
+URL: http://robjhyndman.com/hyndsight/tscvexample/
+
+
+Note: The user-contributed package named "naiveFC" also supports
+cross-validating various time-series models. See here:
+http://ricardo.ecn.wfu.edu/gretl/cgi-bin/current_fnfiles/unzipped/naiveFC.pdf
+
+
+
+Public functions
+=================
+
+crossvalid(const series y, const list X, int k, int nhor, int method,
+           int fccrit)
+========================================================================
+
+Parameters
+-----------
+y          - series, Dependent series
+X          - list, List of regressors (incl. deterministics)
+k          - int, Length of the training set TODO
+nhor       - int, Number of multi-step forecast horizons (1 to 'nhor')
+method     - int, Type of estimator:
+                               1 = OLS
+                               2 = PROBIT
+fccrit     - int, Select forecast evaluation metric (see 'help fcstats'):
+                               1 = ME
+                               2 = MSE
+                               3 = MAE
+                               4 = MPE
+                               5 = MAPE
+                               6 = U
+                               7 = UM
+                               8 = UR
+                               9 = UD
+             For probit model only:
+                               1 = Quadratic Probability Score
+                               2 = Log Probability Score
+
+
+Return:
+--------
+matrix, 2 by nhor matrix showing the cross-validated mean (row 1) and
+median (row 2) of the selected evaluation criteria for each horizon
+(columns).
+
+
+CHANGELOG:
+v0.3 (July 2021)
+  - Update some internals and help text
+  - increase minimum version from 1.9.4 to 2020b
+
+v0.2 (24.1.16)
+ - initial version
+

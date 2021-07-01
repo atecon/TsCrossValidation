@@ -1,0 +1,79 @@
+set verbose off
+clear
+set assert stop
+
+include assertion.gfn
+
+include "./src/TsCrossValidation.inp" --force
+
+function scalar assert_matrix_equality (matrix actual, matrix expected)
+    /* Assert element-wise equality.
+    return: int, summed differences; zero value implies "any"-equality  */
+
+    d = abs(vec(actual)) .- abs(vec(expected))
+
+    return sum(d)
+end function
+
+
+open denmark.gdt -q -p
+
+
+function void test_baseline_ols (const list L)
+    print "Start testing ols"
+
+    # Given
+    scalar k = 25
+    scalar p = 2
+    scalar method = 1
+    scalar nhor = 4
+
+    list X = L.LRM L.LRY L.IBO L.IDE
+    X = X(-1 to -p)
+    X += const
+
+    # When
+    matrix FC = crossvalid(L.LRM, X, k, nhor, method, 3)
+    expected_mean = {0.025081, 0.025384, 0.025629, 0.026894}
+    expected_median = {0.015707, 0.022308, 0.021727, 0.027735}
+
+    # Then
+    assert_almost_equal_num( assert_matrix_equality(FC[1,], expected_mean),\
+                        0, 10e-5)
+    assert_almost_equal_num( assert_matrix_equality(FC[2,], expected_median),\
+                        0, 10e-5)
+end function
+test_baseline_ols(dataset)
+
+
+function void test_baseline_probit (const list L)
+    print "Start testing ols"
+
+    # Given
+    series y = 0
+    y = (diff(L.LRM) >= mean(diff(L.LRM)))
+    scalar fccrit = 2
+    scalar k = 25
+    scalar p = 2
+    scalar method = 2
+    scalar nhor = 4
+    list xlist = const time
+
+    # When
+    matrix FC = crossvalid(y, xlist, k, nhor,method, fccrit)
+
+    expected_mean = {0.75787, 0.78776, 0.79564, 0.81206}
+    expected_median = {0.60239, 0.74546, 0.70890, 0.66950}
+
+    # Then
+    assert_almost_equal_num( assert_matrix_equality(FC[1,], expected_mean),\
+                        0, 10e-5)
+    assert_almost_equal_num( assert_matrix_equality(FC[2,], expected_median),\
+                        0, 10e-5)
+end function
+test_baseline_probit(dataset)
+
+
+
+printf "\nInfo: All tests passed.\n"
+quit
