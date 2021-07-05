@@ -23,7 +23,7 @@ matrix CV2 = crossvalid(LRM, xlist, k, nhor,method, 3)
 
 # PLOT the median MAE value for each horizon
 mplot = CV1[2,]' ~ CV2[2,]'
-cnames(mplot, "ARDL(2,2) ARDL(2,2)+G2S")
+cnameset(mplot, "ARDL(2,2) ARDL(2,2)+G2S")
 string title = "Mean absolute error"
 string xname = "Forecast horizon"
 plot mplot
@@ -50,7 +50,7 @@ list xlist = const time y(-1)
 matrix CV2 = crossvalid(y, xlist, k, nhor,method, fccrit)
 
 mplot = CV1[2,]' ~ CV2[2,]'
-cnames(mplot, "Static+trend AR(1)+trend")
+cnameset(mplot, "Static+trend AR(1)+trend")
 if fccrit ==1
     string title = "Quadratic Probability Loss"
 elif fccrit==2

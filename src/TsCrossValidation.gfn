@@ -3,7 +3,7 @@
 <gretl-function-package name="TsCrossValidation" needs-time-series-data="true" minver="2020b">
 <author email="atecon@posteo.de">Artur Tarassow</author>
 <version>0.3</version>
-<date>2021-07-01</date>
+<date>2021-07-05</date>
 <description>Time-series cross-validation</description>
 <tags>C53</tags>
 <help>
@@ -218,7 +218,7 @@ matrix CV2 = crossvalid(LRM, xlist, k, nhor,method, 3)
 
 # PLOT the median MAE value for each horizon
 mplot = CV1[2,]' ~ CV2[2,]'
-colnames(mplot, &quot;ARDL(2,2) ARDL(2,2)+G2S&quot;)
+cnameset(mplot, &quot;ARDL(2,2) ARDL(2,2)+G2S&quot;)
 string title = &quot;Mean absolute error&quot;
 string xname = &quot;Forecast horizon&quot;
 plot mplot
@@ -245,7 +245,7 @@ list xlist = const time y(-1)
 matrix CV2 = crossvalid(y, xlist, k, nhor,method, fccrit)
 
 mplot = CV1[2,]' ~ CV2[2,]'
-colnames(mplot, &quot;Static+trend AR(1)+trend&quot;)
+cnameset(mplot, &quot;Static+trend AR(1)+trend&quot;)
 if fccrit ==1
     string title = &quot;Quadratic Probability Loss&quot;
 elif fccrit==2
