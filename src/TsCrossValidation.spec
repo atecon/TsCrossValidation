@@ -1,7 +1,7 @@
 author = Artur Tarassow
 email = atecon@posteo.de
 version = 0.3
-date = 2021-07-01
+date = 2021-07-05
 description = Time-series cross-validation
 tags = C53
 min-version = 2020b
